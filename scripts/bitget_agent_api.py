@@ -333,6 +333,28 @@ def search_tokens(keyword: str, chain: Optional[str] = None) -> dict:
     return _request("/market/v2/search/tokens", body)
 
 
+def search_tokens_v3(
+    keyword: str,
+    chain: Optional[str] = None,
+    limit: int = 20,
+    order_by: Optional[str] = None,
+) -> dict:
+    """
+    Search tokens (v3). Supports ordering by market_cap etc.
+
+    keyword: search term (name, symbol, or contract address)
+    chain: optional chain filter (e.g. eth, sol, bnb)
+    limit: max results (default 20)
+    order_by: sort field (e.g. "market_cap")
+    """
+    body: dict = {"keyword": keyword, "limit": limit}
+    if chain:
+        body["chain"] = chain
+    if order_by:
+        body["order_by"] = order_by
+    return _request("/market/v3/coin/search", body)
+
+
 # ---------------------------------------------------------------------------
 # Market data — token info, price, kline, tx info, rankings, liquidity, security
 # Paths follow ToB market API; agent API uses same backend with token auth.
@@ -404,10 +426,126 @@ def liquidity(chain: str, contract: str) -> dict:
     return _request("/market/v3/poolList", body)
 
 
+def coin_market_info(chain: str, contract: str) -> dict:
+    """
+    Get token market info + pool list: price, market_cap, fdv, liquidity, turnover, holders, age,
+    price changes (5m/1h/4h/24h), all trading pairs (pool_address, protocol, token0/1, liquidity),
+    narratives description, narrative_tags.
+    """
+    body = {"chain": chain, "contract": contract}
+    return _request("/market/v3/coin/getMarketInfo", body)
+
+
+def coin_dev(
+    chain: str,
+    contract: str,
+    limit: int = 30,
+    is_migrated: Optional[bool] = None,
+) -> dict:
+    """
+    Get token dev analysis: dev's historical projects with rug status, migration info.
+
+    chain: chain code (e.g. sol, bnb)
+    contract: token contract address
+    limit: max tokens to return (default 30)
+    is_migrated: null=all, true=migrated only, false=unmigrated only
+
+    Response data fields:
+      total_count, migrated_count, unmigrated_count,
+      chain_coin_symbol, chain_coin_icon, chain_coin_price,
+      tokens[]: list of dev's historical projects, each with:
+        icon, chain, name, symbol, contract, market_cap, market_cap_chain_coin,
+        liquidity, liquidity_chain_coin, rug_status (0=safe, 1=rugged),
+        issue_date (unix timestamp), is_migrated (bool)
+    """
+    body: dict = {"chain": chain, "contract": contract, "limit": limit}
+    if is_migrated is not None:
+        body["is_migrated"] = is_migrated
+    return _request("/market/v3/coin/dev", body)
+
+
 def security(chain: str, contract: str, source: str = "bg") -> dict:
     """Security audit for a token. Check highRisk, riskCount, buyTax/sellTax, etc. See docs/market-data.md."""
     body = {"list": [{"chain": chain, "contract": contract}], "source": source}
     return _request("/market/v3/coin/security/audits", body)
+
+
+def launchpad_tokens(
+    chain: str = "sol",
+    platforms: Optional[List[str]] = None,
+    stage: Optional[int] = None,
+    age_min: Optional[int] = None,
+    age_max: Optional[int] = None,
+    mc_min: Optional[int] = None,
+    mc_max: Optional[int] = None,
+    lp_min: Optional[int] = None,
+    lp_max: Optional[int] = None,
+    vol_min: Optional[int] = None,
+    vol_max: Optional[int] = None,
+    holder_min: Optional[int] = None,
+    holder_max: Optional[int] = None,
+    progress_min: Optional[float] = None,
+    progress_max: Optional[float] = None,
+    sniper_percent_max: Optional[float] = None,
+    keywords: Optional[str] = None,
+    limit: int = 100,
+) -> dict:
+    """
+    Scan launchpad new pools. Filters by chain, platform, stage, age, market cap, liquidity, volume, holders, progress, etc.
+
+    stage: 0=new (progress<0.5), 1=launching (0.5~1.0), 2=launched (progress>=1.0)
+    age_min/age_max: token age range in seconds
+    mc_min/mc_max: market cap range (USD)
+    lp_min/lp_max: liquidity range (USD)
+    vol_min/vol_max: volume range (USD)
+    holder_min/holder_max: holder count range
+    progress_min/progress_max: bonding curve progress (0~1)
+    sniper_percent_max: max sniper holder percentage (0~1)
+    platforms: list of platform identifiers. Supported values:
+      Solana: pump.fun, pump.fun.mayhem, raydium.Launchlab, believe, bonk.fun,
+              jup.studio, bags.fm, trends.fun, MeteoraBC, muffun.fun
+      BNB:    four.meme, four.meme.bn, four.meme.agent, flap
+      Base:   zoraContent, zoraCreator, virtuals, clanker, bankr
+    keywords: search keyword (e.g. "pepe")
+
+    Response fields per token: chain, contract, symbol, name, icon, issue_date, holders,
+    liquidity, top10/insider/sniper/dev holder percents, dev_rug_percent, lock_lp_percent,
+    price, socials (twitter/website/telegram/discord), platform, progress, market_cap, turnover, txns.
+    """
+    body: dict = {"chain": chain, "limit": limit}
+    if platforms is not None:
+        body["platforms"] = platforms
+    if stage is not None:
+        body["stage"] = stage
+    if age_min is not None:
+        body["age_min"] = age_min
+    if age_max is not None:
+        body["age_max"] = age_max
+    if mc_min is not None:
+        body["mc_min"] = mc_min
+    if mc_max is not None:
+        body["mc_max"] = mc_max
+    if lp_min is not None:
+        body["lp_min"] = lp_min
+    if lp_max is not None:
+        body["lp_max"] = lp_max
+    if vol_min is not None:
+        body["vol_min"] = vol_min
+    if vol_max is not None:
+        body["vol_max"] = vol_max
+    if holder_min is not None:
+        body["holder_min"] = holder_min
+    if holder_max is not None:
+        body["holder_max"] = holder_max
+    if progress_min is not None:
+        body["progress_min"] = progress_min
+    if progress_max is not None:
+        body["progress_max"] = progress_max
+    if sniper_percent_max is not None:
+        body["sniper_percent_max"] = sniper_percent_max
+    if keywords is not None:
+        body["keywords"] = keywords
+    return _request("/market/v3/launchpad/tokens", body)
 
 
 # ---------------------------------------------------------------------------
@@ -723,6 +861,16 @@ def _cmd_search_tokens(args):
     print(json.dumps(out, indent=2, ensure_ascii=False))
 
 
+def _cmd_search_tokens_v3(args):
+    out = search_tokens_v3(
+        keyword=args.keyword,
+        chain=getattr(args, "chain", None),
+        limit=args.limit,
+        order_by=getattr(args, "order_by", None),
+    )
+    print(json.dumps(out, indent=2, ensure_ascii=False))
+
+
 # ---- Market data CLI ----
 
 def _cmd_token_info(args):
@@ -794,8 +942,50 @@ def _cmd_liquidity(args):
     print(json.dumps(out, indent=2, ensure_ascii=False))
 
 
+def _cmd_coin_market_info(args):
+    out = coin_market_info(chain=args.chain, contract=args.contract)
+    print(json.dumps(out, indent=2, ensure_ascii=False))
+
+
+def _cmd_coin_dev(args):
+    is_mig = None
+    if args.is_migrated is not None:
+        is_mig = args.is_migrated.lower() == "true"
+    out = coin_dev(
+        chain=args.chain,
+        contract=args.contract,
+        limit=args.limit,
+        is_migrated=is_mig,
+    )
+    print(json.dumps(out, indent=2, ensure_ascii=False))
+
+
 def _cmd_security(args):
     out = security(chain=args.chain, contract=args.contract)
+    print(json.dumps(out, indent=2, ensure_ascii=False))
+
+
+def _cmd_launchpad_tokens(args):
+    out = launchpad_tokens(
+        chain=args.chain,
+        platforms=args.platforms.split(",") if args.platforms else None,
+        stage=args.stage,
+        age_min=args.age_min,
+        age_max=args.age_max,
+        mc_min=args.mc_min,
+        mc_max=args.mc_max,
+        lp_min=args.lp_min,
+        lp_max=args.lp_max,
+        vol_min=args.vol_min,
+        vol_max=args.vol_max,
+        holder_min=args.holder_min,
+        holder_max=args.holder_max,
+        progress_min=args.progress_min,
+        progress_max=args.progress_max,
+        sniper_percent_max=args.sniper_percent_max,
+        keywords=args.keywords,
+        limit=args.limit,
+    )
     print(json.dumps(out, indent=2, ensure_ascii=False))
 
 
@@ -967,10 +1157,17 @@ def main():
     p.set_defaults(func=_cmd_batch_v2)
 
     # searchTokens: search by keyword or contract address; optional chain to restrict to one chain
-    p = sub.add_parser("search-tokens", help="Search tokens by keyword or contract /market/v2/search/tokens")
+    p = sub.add_parser("search-tokens", help="[Search] Search tokens by keyword or contract (v2)")
     p.add_argument("--keyword", required=True, help="Keyword or full contract address")
     p.add_argument("--chain", default=None, help="Optional: restrict search to this chain (e.g. bnb, eth)")
     p.set_defaults(func=_cmd_search_tokens)
+
+    p = sub.add_parser("search-tokens-v3", help="[Search] Search tokens with ordering support (v3)")
+    p.add_argument("--keyword", required=True, help="Search term (name, symbol, or contract)")
+    p.add_argument("--chain", default=None, help="Optional chain filter (e.g. eth, sol, bnb)")
+    p.add_argument("--limit", type=int, default=20, help="Max results (default: 20)")
+    p.add_argument("--order-by", dest="order_by", default=None, help="Sort field (e.g. market_cap)")
+    p.set_defaults(func=_cmd_search_tokens_v3)
 
     # ---- Market data ----
     p = sub.add_parser("token-info", help="[Market] Get single token base info")
@@ -1017,10 +1214,43 @@ def main():
     p.add_argument("--contract", required=True)
     p.set_defaults(func=_cmd_liquidity)
 
+    p = sub.add_parser("coin-market-info", help="[Market] Token market info + pool list (price, MC, FDV, pairs, narratives)")
+    p.add_argument("--chain", required=True)
+    p.add_argument("--contract", required=True)
+    p.set_defaults(func=_cmd_coin_market_info)
+
+    p = sub.add_parser("coin-dev", help="[Market] Dev historical projects (rug status, migration, MC, LP)")
+    p.add_argument("--chain", required=True)
+    p.add_argument("--contract", required=True)
+    p.add_argument("--limit", type=int, default=30, help="Max tokens to return (default: 30)")
+    p.add_argument("--is-migrated", dest="is_migrated", default=None, help="Filter: true=migrated, false=unmigrated, omit=all")
+    p.set_defaults(func=_cmd_coin_dev)
+
     p = sub.add_parser("security", help="[Market] Security audit for a token")
     p.add_argument("--chain", required=True)
     p.add_argument("--contract", required=True)
     p.set_defaults(func=_cmd_security)
+
+    p = sub.add_parser("launchpad-tokens", help="[Market] Scan launchpad new pools (pump.fun etc.)")
+    p.add_argument("--chain", default="sol", help="Chain code (default: sol)")
+    p.add_argument("--platforms", default=None, help="Comma-separated platforms (e.g. pump.fun,raydium.Launchlab,four.meme,virtuals)")
+    p.add_argument("--stage", type=int, default=None, help="0=new, 1=launching, 2=launched")
+    p.add_argument("--age-min", dest="age_min", type=int, default=None, help="Min token age in seconds")
+    p.add_argument("--age-max", dest="age_max", type=int, default=None, help="Max token age in seconds")
+    p.add_argument("--mc-min", dest="mc_min", type=int, default=None, help="Min market cap (USD)")
+    p.add_argument("--mc-max", dest="mc_max", type=int, default=None, help="Max market cap (USD)")
+    p.add_argument("--lp-min", dest="lp_min", type=int, default=None, help="Min liquidity (USD)")
+    p.add_argument("--lp-max", dest="lp_max", type=int, default=None, help="Max liquidity (USD)")
+    p.add_argument("--vol-min", dest="vol_min", type=int, default=None, help="Min volume (USD)")
+    p.add_argument("--vol-max", dest="vol_max", type=int, default=None, help="Max volume (USD)")
+    p.add_argument("--holder-min", dest="holder_min", type=int, default=None, help="Min holder count")
+    p.add_argument("--holder-max", dest="holder_max", type=int, default=None, help="Max holder count")
+    p.add_argument("--progress-min", dest="progress_min", type=float, default=None, help="Min bonding curve progress (0~1)")
+    p.add_argument("--progress-max", dest="progress_max", type=float, default=None, help="Max bonding curve progress (0~1)")
+    p.add_argument("--sniper-percent-max", dest="sniper_percent_max", type=float, default=None, help="Max sniper holder percent (0~1)")
+    p.add_argument("--keywords", default=None, help="Search keyword (e.g. pepe)")
+    p.add_argument("--limit", type=int, default=100, help="Max results (default: 100)")
+    p.set_defaults(func=_cmd_launchpad_tokens)
 
     # ---- RWA ----
     p = sub.add_parser("rwa-get-user-ticker-selector", help="[RWA] Query/search RWA stock tickers; optional user_address for balance")

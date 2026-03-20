@@ -40,6 +40,39 @@ See Scripts for full command details and `docs/swap.md` for the complete flow.
 
 **Technical reference:** Base URL `https://copenapi.bgwapi.io` (token auth, no API key). All commands via `scripts/bitget_agent_api.py` — run with `--help` for full subcommand list, or see [`docs/commands.md`](docs/commands.md).
 
+## Market Tools Architecture
+
+Market tools handle **token discovery and analysis only** — no trading, wallet, or signing. One tool per domain, depth controlled by parameters.
+
+### bgw_token_find — Token Discovery
+
+| Use Case | Command | Description |
+|----------|---------|-------------|
+| Scan new pools | `launchpad-tokens` | Filter by platform/stage/MC/LP/holders/progress |
+| Search tokens | `search-tokens-v3` | Keyword or contract search with ordering |
+| Rankings | `rankings` | topGainers / topLosers / Hotpicks |
+| New launches | `historical-coins` | Discover tokens by timestamp, paginated |
+
+**Mandatory output rule:** All token discovery results **must** include **chain** and **contract address (CA)** for every token. This enables the user to directly proceed to check, analyze, or trade. Never omit chain or CA from discovery output.
+
+### bgw_token_check — Token Analysis
+
+| Use Case | Command | Description |
+|----------|---------|-------------|
+| Security audit | `security` | Honeypot/mint/proxy + buy/sell tax + risk level |
+| Dev analysis | `coin-dev` | Dev's historical projects + rug status + migration info |
+| Market overview | `coin-market-info` | Price/MC/FDV/pool list/price changes/narratives |
+| Token info | `token-info` | Basic info + social links |
+| K-line | `kline` | OHLC + buy/sell volume |
+| Tx stats | `tx-info` | Buy/sell volume and trader count |
+| Liquidity | `liquidity` | Pool details |
+
+**Recommended check order:** coin-market-info → security → coin-dev → (kline + tx-info)
+
+**Pre-trade mandatory:** check-swap-token → security
+
+Full domain knowledge and Skills-layer computation rules in [`docs/market-data.md`](docs/market-data.md).
+
 ## Domain Knowledge
 
 ### Skill Domain Knowledge
@@ -115,7 +148,7 @@ Load the following when the task requires it:
 5. **Token approval (EVM):** ERC-20 must be approved for the router; see "EVM Token Approval" in `docs/swap.md`.
 6. **Wallet before balance/swap:** If no wallet is configured, guide the user through First-Time Wallet Setup (see Wallet Domain Knowledge above).
 7. **Script usage:** Use CLI commands from this SKILL (e.g. `bitget_agent_api.py`, `order_sign.py`).
-8. **Key security:** Derive private keys from mnemonic on-the-fly, pass to `order_sign.py --private-key`, discard immediately after signing. Never store keys or output mnemonic/keys to chat.
+8. **Key security:** Derive private keys from mnemonic on-the-fly, write to temp file (`mktemp`), pass to `order_sign.py --private-key-file` (script reads and auto-deletes). Never store keys or output mnemonic/keys to chat.
 9. **Human-readable amounts:** Pass fromAmount etc. as user-facing numbers (e.g. `0.01`), not wei/lamports/decimals.
 10. **Security:** Mnemonic and private keys must **never** appear in conversation, prompts, or any output. Only mnemonic **file path** and derived **addresses** may be in context.
 
@@ -123,7 +156,7 @@ Load the following when the task requires it:
 
 ### Chain Identifiers
 
-**Swap-supported chains (7):**
+**Swap-supported chains (8):**
 
 | Chain | ID | Code |
 |-------|------|------|
@@ -147,8 +180,8 @@ Use empty string `""` for native token contract (ETH, SOL, BNB, etc.).
 
 | Script | Purpose | Key commands |
 |--------|---------|-------------|
-| `bitget_agent_api.py` | Unified API client | Balance, token search, market data (info/price/kline/tx/rankings/liquidity/security), swap flow (quote→confirm→make-order→send→get-order-details) |
-| `order_make_sign_send.py` | One-shot swap execution | makeOrder + sign + send in one run. `--private-key` (EVM) or `--private-key-sol` (Solana). Avoids 60s expiry. |
+| `bitget_agent_api.py` | Unified API client | Balance, token find (launchpad-tokens/search-tokens-v3/rankings), token check (security/coin-dev/coin-market-info/kline/tx-info), swap flow (quote→confirm→make-order→send→get-order-details) |
+| `order_make_sign_send.py` | One-shot swap execution | makeOrder + sign + send in one run. `--private-key-file` (EVM) or `--private-key-file-sol` (Solana). Avoids 60s expiry. |
 | `order_sign.py` | Sign makeOrder data | Outputs JSON array of signatures. Supports raw tx, EVM gasPayMaster (eth_sign), EIP-712, Solana Ed25519, Solana gasPayMaster. |
 | `x402_pay.py` | x402 payment | EIP-3009 signing, Solana partial-sign, HTTP 402 pay flow |
 
@@ -158,10 +191,15 @@ Use empty string `""` for native token contract (ETH, SOL, BNB, etc.).
 # Balance (include native token "" to check gas)
 python3 scripts/bitget_agent_api.py get-processed-balance --chain bnb --address <addr> --contract "" --contract <token>
 
-# Market data
-python3 scripts/bitget_agent_api.py token-price --chain bnb --contract <addr>
+# Token find (bgw_token_find)
+python3 scripts/bitget_agent_api.py launchpad-tokens --chain sol --platforms pump.fun --stage 1 --mc-min 10000 --holder-min 100
+python3 scripts/bitget_agent_api.py search-tokens-v3 --keyword pepe --chain sol --order-by market_cap
 python3 scripts/bitget_agent_api.py rankings --name Hotpicks  # or topGainers, topLosers
+
+# Token check (bgw_token_check)
+python3 scripts/bitget_agent_api.py coin-market-info --chain sol --contract <addr>
 python3 scripts/bitget_agent_api.py security --chain bnb --contract <addr>
+python3 scripts/bitget_agent_api.py coin-dev --chain sol --contract <addr>
 
 # Swap flow
 python3 scripts/bitget_agent_api.py quote --from-chain bnb --from-contract <addr> --from-symbol USDT --from-amount 5 --to-chain bnb --to-contract "" --to-symbol BNB --from-address <wallet> --to-address <wallet>

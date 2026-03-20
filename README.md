@@ -13,23 +13,40 @@ An AI Agent skill that wraps the [Bitget Wallet API](https://web3.bitget.com/en/
 | **API Infrastructure, Not Reimplementation** | Capabilities come from Bitget Wallet's production API. The skill provides the knowledge and tooling layer, not a parallel implementation |
 | **Human-in-the-Loop by Default** | Swap operations generate transaction data but never sign autonomously. User confirmation required for all fund-moving actions |
 
+### Market Tools Architecture
+
+Market side handles **token discovery and analysis only** — no trading, wallet, or signing. Skills layer computes scores and rules; backend provides raw data.
+
+```
+Atomic Tools (Agent orchestrates)
+├── bgw_token_find      Find tokens (chain scan / search / rankings / sectors)
+├── bgw_token_check     Check tokens (security / dev / anti-manipulation / signals / market)
+├── bgw_token_analyze   Analyze tokens (deep: timeline / trades / holdings / smart money)
+├── bgw_address_find    Find addresses (by pool / role / criteria)
+└── bgw_address_analyze Analyze addresses (scoring / PnL / style / operations / comparison)
+
+Smart Tools (We orchestrate)
+├── bgw_combo    Smart combos (token + address permutation recipes)
+└── bgw_monitor  Continuous monitoring (token signals / address activity / price alerts)
+```
+
 ### Core Capabilities
 
 | Capability | Description | Example |
 |------------|-------------|---------|
+| **Launchpad Scanner** | Scan new pools (pump.fun, four.meme, etc.) with 15+ filters | "Scan pump.fun for launching tokens with >$10K MC" |
+| **Token Search (v3)** | Search by keyword/contract with market_cap ordering + risk_level | "Find PEPE on ETH sorted by market cap" |
+| **Token Market Info** | Price, MC, FDV, liquidity, 57 pool pairs, narratives, price changes | "Show me full market info for Lobstar" |
+| **Dev Analysis** | Dev address, rug history, LP lock, holdings, migration history | "Check this token's dev history" |
+| **Security Audit** | Honeypot/mint/proxy + buy/sell tax + risk checks (EVM & Solana) | "Is this contract safe?" |
 | **Balance Query** | On-chain balance per chain/address/token (native + ERC-20/SPL) | "What's my BNB balance?" |
 | **Balance + Price** | Batch balance with USD price in one call | "What's my portfolio worth?" |
-| **Token Search** | Search tokens by name, symbol, or contract address | "Find USDC on BNB chain" |
-| **Token List** | Available tokens per chain for swap | "What tokens can I swap on Base?" |
 | **Token Info** | Price, market cap, holders, social links | "What's the price of SOL?" |
-| **Batch Price Query** | Multi-token price lookup in one call | Portfolio valuation |
-| **K-line Data** | 1m/5m/1h/4h/1d candlestick data | Trend analysis, charting |
+| **K-line Data** | 1m/5m/1h/4h/1d candlestick data with buy/sell breakdown | Trend analysis, buying pressure |
 | **Transaction Stats** | 5m/1h/4h/24h buy/sell volume & trader count | Activity detection, whale monitoring |
 | **Rankings** | Top gainers / top losers / Hotpicks (curated trending) | Market scanning, alpha discovery |
 | **Liquidity Pools** | LP pool information | Slippage estimation, depth analysis |
-| **Security Audit** | Contract safety checks (honeypot, permissions, blacklist) | Pre-trade risk control |
-| **Batch Tx Info** | Batch transaction statistics for multiple tokens | "Compare volume for SOL and ETH" |
-| **Historical Coins** | Discover new tokens by timestamp | "What tokens launched today?" |
+| **Historical Coins** | Discover new tokens by timestamp (paginated) | "What tokens launched today?" |
 | **Token Risk Check** | Pre-swap safety check for from/to tokens (forbidden-buy detection) | "Is this token safe to buy?" |
 | **Swap Quote** | Multi-market quotes for same-chain/cross-chain swaps | "How much USDC for 1 SOL?" |
 | **Swap Confirm** | Final quote from selected market with orderId | Lock in price and route |

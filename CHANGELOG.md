@@ -6,6 +6,23 @@ Format: date-based versioning (`YYYY.M.DD`). Each release includes a sequential 
 
 ---
 
+## [2026.3.23-1] - 2026-03-23
+
+### Added — Social Login Wallet
+- `scripts/social-wallet.py` — 174-line Python CLI for signing transactions and messages via Bitget Wallet TEE (Trusted Execution Environment). Private keys never leave the TEE; agent authenticates with appid/appsecret.
+- `docs/social-wallet.md` — Complete integration guide: per-chain parameters (BTC/ETH/SOL/Tron + 16 EVM chains), 3 signing modes for swap flow (gasPayMaster, regular EVM tx, Tron tx), common mistakes table.
+- Supports: BTC (Taproot/SegWit/Legacy/PSBT), ETH, SOL (native+SPL+versioned), Tron, and all EVM chains via `evm_custom#` prefix.
+- Operations: `sign_transaction`, `sign_message`, `get_address`, `get_public_key`, `validate_address`, `batchGetAddressAndPubkey`.
+
+### Added — Swap Integration with Social Login Wallet
+- 3 signing modes documented and verified:
+  - **gasPayMaster (gasless):** `EthSign:{hash}` via `sign_message` → `msg["sig"]` → `json.dumps(msgs)` — works for both same-chain and cross-chain gasless swaps
+  - **Regular EVM tx:** `sign_transaction` → signed RLP hex
+  - **Tron tx:** `sign_transaction` returns raw 65-byte sig hex → must be wrapped in `{"signature":[hex],"txID":...,"raw_data":...}`
+- Critical rule: always check `deriveTransaction.msgs` first to detect gasPayMaster mode, even for cross-chain txs
+
+---
+
 ## [2026.3.20-1] - 2026-03-20
 
 ### Added — Market Tools (bgw_token_find + bgw_token_check)

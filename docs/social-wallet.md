@@ -4,6 +4,39 @@ All operations use `social-wallet.py core <operation> '<params_json>'`.
 
 `<params_json>` is a JSON object. The `chain` field is always required. For custom EVM chains (`evm_custom#`), `chainId` is also required (e.g. `"chainId": 56` for BNB, `"chainId": 8453` for Base). Native chains like `eth` default to their standard chainId.
 
+## profile — Get Wallet Identity
+
+Retrieve the `walletId` for the current Social Login Wallet. This ID must be passed as `--wallet-id` to all `bitget-wallet-agent-api.py` calls when using a Social Login Wallet.
+
+**Endpoint:** `POST /social-wallet/agent/profile`
+
+**Usage:**
+```bash
+python3 scripts/social-wallet.py profile
+```
+
+**Request:** Encrypted empty `{}` payload (same auth flow as other endpoints — AES-GCM encryption + HMAC-SHA384 signature). No business parameters needed.
+
+**Response:**
+```json
+{
+  "walletId": "58680ea41d9e987cddc641ff8b058c55"
+}
+```
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `walletId` | string | Unique wallet identifier. Pass to `--wallet-id` in all `bitget-wallet-agent-api.py` calls. |
+
+**When to call:**
+- Once per session, before any API calls that need wallet identity.
+- The `walletId` does not expire within a session, but changes if the user re-binds with a different appid/appsecret.
+
+**Flow:**
+1. Call `social-wallet.py profile` → get `walletId`
+2. Pass `--wallet-id <walletId>` to all subsequent `bitget-wallet-agent-api.py` commands (balance, quote, confirm, make-order, send, etc.)
+3. Without `--wallet-id`, the API defaults to `toc_agent` token (for mnemonic/private-key wallets)
+
 ## User Confirmation Rule
 
 **Every signing operation (`sign_transaction`, `sign_message`) requires explicit user confirmation before execution.** The agent must:
@@ -14,7 +47,26 @@ All operations use `social-wallet.py core <operation> '<params_json>'`.
 
 Read-only operations (`get_address`, `get_public_key`, `validate_address`, `batchGetAddressAndPubkey`) do not require confirmation.
 
-## Integration with Swap Flow (gasPayMaster / gasless)
+## Fund Limit & Wallet Isolation
+
+**Social Login Wallets are for small, routine on-chain operations — NOT primary asset storage.**
+
+- **Before the first transaction**, remind the user to confirm how much they are comfortable keeping in this wallet. Suggested range: small test amounts or daily-use funds only.
+- **Keep isolated from main wallet.** The Social Login Wallet should not hold the user's primary assets. If the user attempts a high-value transaction (e.g. > $100 or a significant portion of their holdings), warn them and suggest using their main wallet (mnemonic/hardware) instead.
+- **Never bulk-transfer assets** from a main wallet into a Social Login Wallet. The Social Login Wallet's security model (TEE-hosted keys, API-based signing) is different from self-custody — users should understand the tradeoff.
+- **Periodically remind users** to move excess funds back to their main wallet if the Social Login Wallet balance grows beyond their intended limit.
+
+## Integration with Swap Flow
+
+**⚠️ `order_make_sign_send.py` is NOT compatible with Social Login Wallets.** That script requires a local private key file, but Social Login Wallets sign via TEE API — no local private key exists. For Social Login Wallet swaps, you **must** use the 3-step manual flow:
+
+1. **makeOrder** → `bitget-wallet-agent-api.py make-order ...`
+2. **Sign** → `social-wallet.py core sign_message/sign_transaction` (per tx, based on mode detection)
+3. **Send** → `bitget-wallet-agent-api.py send --json-file ...`
+
+All three steps must complete within ~60 seconds (makeOrder data expiry).
+
+### gasPayMaster / gasless
 
 When using the Social Login Wallet for gasless swaps (no_gas mode), the makeOrder response returns `txFunction: "swap_instant_gas_paymaster"` with `deriveTransaction.msgs[]`. Each msg has `signType: "eth_sign"` and a `hash` to sign.
 
